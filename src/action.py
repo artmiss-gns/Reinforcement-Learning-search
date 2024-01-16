@@ -19,9 +19,9 @@ class Actions:
         elif action in ["terminate"] :
             return 100
         elif action in ["ladder_up"] : 
-            return 10
+            return 2
         elif action in ["snake_down"] :
-            return -10
+            return -2
             
     @classmethod    
     def get_num_actions(cls):

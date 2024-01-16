@@ -7,7 +7,7 @@ from src.action import Actions
 class QLearning :
     def __init__(
             self, n, snakes:List[Tuple[int, int]], ladders:List[Tuple[int, int]],
-            alpha=0.3, p=0.7, lambda_=1
+            alpha=0.3, p=0.7, lambda_=1, log=True
         ) :
         self.n = n
         self.snakes = snakes
@@ -18,21 +18,28 @@ class QLearning :
         self.p = p
         self.lambda_ = lambda_
         self.q_table = np.zeros(shape=(n**2, Actions.get_num_actions()))
+        self.log = log
 
         # fix snakes loc
-        for s in snakes :
-            x_start, y_start = self.state_to_loc(s[0], self.n)
-            x_end, y_end = self.state_to_loc(s[1], self.n)
-            self.snakes_loc.append(
-                ((x_start, y_start, x_end, y_end))
-            )
+        if snakes :
+            for s in snakes :
+                x_start, y_start = self.state_to_loc(s[0], self.n)
+                x_end, y_end = self.state_to_loc(s[1], self.n)
+                self.snakes_loc.append(
+                    ((x_start, y_start, x_end, y_end))
+                )
+        else :
+            self.snakes_loc = []
         # fix ladder loc
-        for l in ladders :
-            x_start, y_start = self.state_to_loc(l[0], self.n)
-            x_end, y_end = self.state_to_loc(l[1], self.n)
-            self.ladders_loc.append(
-                ((x_start, y_start, x_end, y_end))
-            )
+        if ladders :
+            for l in ladders :
+                x_start, y_start = self.state_to_loc(l[0], self.n)
+                x_end, y_end = self.state_to_loc(l[1], self.n)
+                self.ladders_loc.append(
+                    ((x_start, y_start, x_end, y_end))
+                )
+        else :
+            self.ladders_loc = []
 
         # * (x, y, x', y') -> (x, y) for start / (x', y') for the end
         self.snakes_loc = np.array(self.snakes_loc)
@@ -40,8 +47,9 @@ class QLearning :
 
 
         # configure logging
-        logging.basicConfig(filename='logs/log.txt', level=logging.DEBUG, format='%(message)s')
-        self.logger = logging.getLogger()
+        if log : 
+            logging.basicConfig(filename='logs/log.txt', level=logging.DEBUG, format='%(message)s')
+            self.logger = logging.getLogger()
 
     def inbound(self, loc, x=0, y=0) :
         new_loc = (loc[0]+y, loc[1]+x)
@@ -52,16 +60,23 @@ class QLearning :
     def get_actions(self, loc) -> List[Actions]:
         if self.loc_to_state(loc, self.n) == self.n**2 : # final state
             return [Actions.terminate]
-        elif list(loc) in self.snakes_loc[:, -2:].tolist(): # if we are at the head of a snake
+        elif self.snakes and list(loc) in self.snakes_loc[:, -2:].tolist(): # if we are at the head of a snake
             return [Actions.snake_down]
-        elif list(loc) in self.ladders_loc[:, 0:2].tolist(): # if we are at the bottom of a ladder
+        elif self.ladders and list(loc) in self.ladders_loc[:, 0:2].tolist(): # if we are at the bottom of a ladder
             return [Actions.ladder_up]
         else :
+            # ! if we could NOT move up in all the side states, uncomment this part :
+            # actions = [Actions.right_1, Actions.right_2, Actions.left_1, Actions.left_2,]
+            # if (loc[0]%2 == 0) and (loc[1] == (self.n-1)) : # even rows
+            #     actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
+            # elif (loc[0]%2 != 0) and (loc[1] == (0)) : # odd rows
+            #     actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
+
+            # ! if we could move up in all the side states, uncomment this part :
             actions = [Actions.right_1, Actions.right_2, Actions.left_1, Actions.left_2,]
-            if (loc[0]%2 == 0) and (loc[1] == (self.n-1)) : # even rows
+            if (loc[1] == (self.n-1)) or (loc[1] == (0))  : # even rows
                 actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
-            elif (loc[0]%2 != 0) and (loc[1] == (0)) : # odd rows
-                actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
+            
                 
             return actions
             # ? we also could have improved this by omitting the actions that are going to go out of the bounds of board
@@ -258,8 +273,34 @@ class QLearning :
                 new_value = self.bellman(loc, new_loc, action) # new value for the current q-value
                 self.update_value(self.q_table, loc, action, new_value) # FIXME it doesn't update , check the log of this block output
 
-
-            self._write_logs(loc, best_action, action, new_value)
+            if self.log :
+                self._write_logs(loc, best_action, action, new_value)
             loc = new_loc
             # time.sleep(0.5)
-    
+
+
+    def _run_simulation(self, n_iter=50) :
+        start_loc = (0, 0)
+        loc = start_loc
+        for _ in range(n_iter) :
+            actions = self.get_actions(loc)
+
+            best_action = self.get_best_move(loc, actions)
+            # with p=0.7 the best action will happen and with p=0.3 the reverse of it
+            action = self.perturb_action(best_action)
+
+            new_loc = self.move(loc, action)
+            if new_loc == -1 : # means we have reached the terminal
+                new_value = self.bellman(loc, new_loc, action)
+                self.update_value(self.q_table, loc, action, new_value)
+                new_loc = (0, 0)
+                
+            else :
+                new_value = self.bellman(loc, new_loc, action) # new value for the current q-value
+                self.update_value(self.q_table, loc, action, new_value) # FIXME it doesn't update , check the log of this block output
+
+            if self.log :
+                self._write_logs(loc, best_action, action, new_value)
+            loc = new_loc
+            # time.sleep(0.5)
+            yield loc

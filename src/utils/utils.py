@@ -23,10 +23,11 @@ def show_table(n: int) :
 
     print(board)
 
-def show_q_table(game) :
 
+def create_q_table_frame(game) :
+    q_table = game.q_table.copy()
     q_table_frame = pd.DataFrame(
-        game.q_table,
+        q_table,
         columns=Actions._actions,
         index=np.arange(1, (game.n**2)+1)
     )
@@ -35,4 +36,11 @@ def show_q_table(game) :
         nan_actions = q_table_frame.loc[row[0], :].drop(actions).index
         q_table_frame.loc[row[0], nan_actions] = np.nan
         # print(actions)
-    print(q_table_frame)
+    return q_table_frame
+
+def show_q_table(game) :
+    print(create_q_table_frame(game))
+
+def show_optimal_policy(game) :
+    q_table_frame = create_q_table_frame(game)
+    return q_table_frame.idxmax(axis=1)
