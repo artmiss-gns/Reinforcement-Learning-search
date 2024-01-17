@@ -15,7 +15,7 @@ class Actions:
         if action in ["up", "right_1", "left_1", "down"] :
             return -1
         elif action in ["left_2", "right_2"]:
-            return -2
+            return -1.5 # value -2 for this doesn't make sense at all!
         elif action in ["terminate"] :
             return 100
         elif action in ["ladder_up"] : 

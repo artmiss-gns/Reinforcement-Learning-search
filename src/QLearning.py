@@ -7,7 +7,7 @@ from src.action import Actions
 class QLearning :
     def __init__(
             self, n, snakes:List[Tuple[int, int]], ladders:List[Tuple[int, int]],
-            alpha=0.3, p=0.7, lambda_=1, log=True
+            alpha=0.3, p=0.7, lambda_=1, log=True, epsilon_greedy=False
         ) :
         self.n = n
         self.snakes = snakes
@@ -17,8 +17,9 @@ class QLearning :
         self.alpha = alpha
         self.p = p
         self.lambda_ = lambda_
-        self.q_table = np.zeros(shape=(n**2, Actions.get_num_actions()))
+        self.q_table = np.zeros(shape=(self.n**2, Actions.get_num_actions()))
         self.log = log
+        self.epsilon_greedy = epsilon_greedy
 
         # fix snakes loc
         if snakes :
@@ -45,12 +46,25 @@ class QLearning :
         self.snakes_loc = np.array(self.snakes_loc)
         self.ladders_loc = np.array(self.ladders_loc)
 
+        # make q-table
+        self._create_q_table()
 
         # configure logging
         if log : 
             logging.basicConfig(filename='logs/log.txt', level=logging.DEBUG, format='%(message)s')
             self.logger = logging.getLogger()
 
+    def _create_q_table(self) :
+        for state in range(1, (self.n**2)+1):
+            loc = self.state_to_loc(state, self.n)
+            actions = self.get_actions(loc)
+            nan_actions = [a for a in Actions._actions if a not in actions]
+            nan_actions_index = [Actions.get_index(a) for a in nan_actions]
+            self.q_table[state-1, [nan_actions_index]] = np.NaN
+
+
+
+            
     def inbound(self, loc, x=0, y=0) :
         new_loc = (loc[0]+y, loc[1]+x)
         if (0 <= new_loc[0] < self.n) and (0 <= new_loc[1] < self.n) :
@@ -58,6 +72,7 @@ class QLearning :
         return False
 
     def get_actions(self, loc) -> List[Actions]:
+        # TODO this function can be changed , there is no need to check all the action from scratch, it can be read from q-table
         if self.loc_to_state(loc, self.n) == self.n**2 : # final state
             return [Actions.terminate]
         elif self.snakes and list(loc) in self.snakes_loc[:, -2:].tolist(): # if we are at the head of a snake
@@ -66,16 +81,16 @@ class QLearning :
             return [Actions.ladder_up]
         else :
             # ! if we could NOT move up in all the side states, uncomment this part :
-            # actions = [Actions.right_1, Actions.right_2, Actions.left_1, Actions.left_2,]
-            # if (loc[0]%2 == 0) and (loc[1] == (self.n-1)) : # even rows
-            #     actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
-            # elif (loc[0]%2 != 0) and (loc[1] == (0)) : # odd rows
-            #     actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
+            actions = [Actions.right_1, Actions.right_2, Actions.left_1, Actions.left_2,]
+            if (loc[0]%2 == 0) and (loc[1] == (self.n-1)) : # even rows
+                actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
+            elif (loc[0]%2 != 0) and (loc[1] == (0)) : # odd rows
+                actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
 
             # ! if we could move up in all the side states, uncomment this part :
-            actions = [Actions.right_1, Actions.right_2, Actions.left_1, Actions.left_2,]
-            if (loc[1] == (self.n-1)) or (loc[1] == (0))  : # even rows
-                actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
+            # actions = [Actions.right_1, Actions.right_2, Actions.left_1, Actions.left_2,]
+            # if (loc[1] == (self.n-1)) or (loc[1] == (0))  : # even rows
+            #     actions.extend([Actions.up]) #  [..,Actions.down] if we could come down from sides
             
                 
             return actions
@@ -123,13 +138,20 @@ class QLearning :
         return (x, y)
 
     def bellman(self, loc, new_loc, action) :
+        '''
+        sample = R(s,a,s') + λ*max Q(s',a')
+        Q(s,a) = (1-a)*Q(s,a) + a*sample 
+        '''
         if new_loc == -1 : # we are in the final step # * we can make this part better later...
             value = Actions.get_reward(action) # ? does it need Lambda to be multiplied to it 
         else :
             state = self.loc_to_state(loc, self.n)
             new_state = self.loc_to_state(new_loc, self.n)
-            sample = Actions.get_reward(action) + self.lambda_*max(self.q_table[new_state-1, :])         # sample = R(s,a,s') + λ*max Q(s',a')
-            value = (1 - self.alpha) * self.q_table[state-1, Actions.get_index(action)] + self.alpha*sample   # Q(s,a) = (1-a)*Q(s,a) + a*sample 
+            sample = Actions.get_reward(action) + self.lambda_*np.nanmax(self.q_table[new_state-1, :])   
+                                                                                                # ! USE np.nanmax here, otherwise it
+                                                                                                # ! will return Nan as max which is messed up!
+            value = (1 - self.alpha) * self.q_table[state-1, Actions.get_index(action)] + self.alpha*sample
+              
             
         return np.round(value, 3)
     
@@ -202,16 +224,27 @@ class QLearning :
             raise Exception(f"action` {action} ` not found!")
         return new_loc
 
-    def perturb_action(self, best_action) :
-        if best_action == Actions.up:  action = np.random.choice([Actions.up, Actions.down], p=[self.p, 1-self.p])
-        elif best_action == Actions.right_1: action = np.random.choice([Actions.right_1, Actions.left_1], p=[self.p, 1-self.p])
-        elif best_action == Actions.right_2: action = np.random.choice([Actions.right_2, Actions.left_2], p=[self.p, 1-self.p])
-        elif best_action == Actions.left_1: action = np.random.choice([Actions.left_1, Actions.right_1], p=[self.p, 1-self.p])
-        elif best_action == Actions.left_2: action = np.random.choice([Actions.left_2, Actions.right_2], p=[self.p, 1-self.p])
-        elif best_action == Actions.down: action = np.random.choice([Actions.down, Actions.up], p=[self.p, 1-self.p])
-        elif best_action == Actions.ladder_up: action = Actions.ladder_up
-        elif best_action == Actions.snake_down: action = Actions.snake_down
-        elif best_action == Actions.terminate: action = Actions.terminate
+    @staticmethod
+    def minmax_scale(x: np.ndarray) -> np.ndarray:
+        return (x - np.min(x)) / (np.max(x) - np.min(x))
+
+    def perturb_action(self, action, actions, epsilon) :
+        if self.epsilon_greedy:
+            if np.random.rand() < (epsilon-0.7) : # randomness  / the epsilon itself seems to be too large
+                print("+")
+                action = np.random.choice(actions)
+            else :
+                print("-")
+
+        if action == Actions.up:  action = np.random.choice([Actions.up, Actions.down], p=[self.p, 1-self.p])
+        elif action == Actions.right_1: action = np.random.choice([Actions.right_1, Actions.left_1], p=[self.p, 1-self.p])
+        elif action == Actions.right_2: action = np.random.choice([Actions.right_2, Actions.left_2], p=[self.p, 1-self.p])
+        elif action == Actions.left_1: action = np.random.choice([Actions.left_1, Actions.right_1], p=[self.p, 1-self.p])
+        elif action == Actions.left_2: action = np.random.choice([Actions.left_2, Actions.right_2], p=[self.p, 1-self.p])
+        elif action == Actions.down: action = np.random.choice([Actions.down, Actions.up], p=[self.p, 1-self.p])
+        elif action == Actions.ladder_up: action = Actions.ladder_up
+        elif action == Actions.snake_down: action = Actions.snake_down
+        elif action == Actions.terminate: action = Actions.terminate
 
         return action
     
@@ -241,6 +274,20 @@ class QLearning :
         state = self.loc_to_state(loc, self.n)
         q_table[state-1, Actions.get_index(action)] = value
 
+    def get_optimal_policy(self) :
+        return [Actions.index_to_action(index) for index in np.nanargmax(self.q_table, axis=1)] # ! again in this part too, use `nanargmax`
+    
+    def show_path(self) :
+        current_state = 1
+        optimal_policy = self.get_optimal_policy()
+        while current_state != (self.n**2) :
+            loc = self.state_to_loc(current_state, self.n)
+            action = optimal_policy[current_state-1]
+            print(current_state, action)
+
+            current_state = self.loc_to_state(self.move(loc, action), self.n)
+
+
     def _write_logs(self, loc, best_action, action, new_value) :
             # print(loc)
             # print(best_action, action)
@@ -252,16 +299,32 @@ class QLearning :
             self.logger.info("Best action: %s\nAction taken: %s", best_action, action) 
             self.logger.info(new_value)
             self.logger.info("%s\n", self.q_table[self.loc_to_state(loc, self.n)-1, :].tolist())
+            
         
     def run(self, n_iter=50) :
         start_loc = (0, 0)
         loc = start_loc
-        for _ in range(n_iter) :
+        if self.epsilon_greedy :
+            epsilon_values = QLearning.minmax_scale(np.arange(n_iter))[::-1]
+
+        for iteration_num in range(n_iter) :
+            ###
+            # if np.isnan(self.q_table).sum().sum() > 93 :
+            #     print(iteration_num)
+            #     print(np.isnan(self.q_table).sum().sum())
+            #     break
+            ###
+            if self.epsilon_greedy :
+                epsilon = epsilon_values[iteration_num]
+            else :
+                epsilon = 0
             actions = self.get_actions(loc)
 
             best_action = self.get_best_move(loc, actions)
+
             # with p=0.7 the best action will happen and with p=0.3 the reverse of it
-            action = self.perturb_action(best_action)
+            action = self.perturb_action(best_action, actions, epsilon)
+
 
             new_loc = self.move(loc, action)
             if new_loc == -1 : # means we have reached the terminal
@@ -282,12 +345,15 @@ class QLearning :
     def _run_simulation(self, n_iter=50) :
         start_loc = (0, 0)
         loc = start_loc
-        for _ in range(n_iter) :
+        epsilon_values = QLearning.minmax_scale(np.arange(n_iter))[::-1]
+
+        for iteration_num in range(n_iter) :
+            epsilon = epsilon_values[iteration_num]
             actions = self.get_actions(loc)
 
             best_action = self.get_best_move(loc, actions)
             # with p=0.7 the best action will happen and with p=0.3 the reverse of it
-            action = self.perturb_action(best_action)
+            action = self.perturb_action(action, actions, epsilon)
 
             new_loc = self.move(loc, action)
             if new_loc == -1 : # means we have reached the terminal

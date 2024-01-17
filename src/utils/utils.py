@@ -44,3 +44,6 @@ def show_q_table(game) :
 def show_optimal_policy(game) :
     q_table_frame = create_q_table_frame(game)
     return q_table_frame.idxmax(axis=1)
+
+
+        
