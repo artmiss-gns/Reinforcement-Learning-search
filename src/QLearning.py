@@ -20,7 +20,9 @@ class QLearning :
         self.q_table = np.zeros(shape=(self.n**2, Actions.get_num_actions()))
         self.log = log
         self.epsilon_greedy = epsilon_greedy
+        self.epsilon_discount_factor = 0.5 # a value which is going to be reduced from epsilon
 
+        self.complete_cycle = 0
         # fix snakes loc
         if snakes :
             for s in snakes :
@@ -228,13 +230,36 @@ class QLearning :
     def minmax_scale(x: np.ndarray) -> np.ndarray:
         return (x - np.min(x)) / (np.max(x) - np.min(x))
 
-    def perturb_action(self, action, actions, epsilon) :
-        if self.epsilon_greedy:
-            if np.random.rand() < (epsilon-0.7) : # randomness  / the epsilon itself seems to be too large
-                print("+")
-                action = np.random.choice(actions)
+    def perturb_action(self, loc, action, actions, epsilon) :
+        if self.epsilon_greedy and len(actions) > 1: # we must have at least 2 option for actions
+            if np.random.rand() < (epsilon-self.epsilon_discount_factor) : # randomness  / the epsilon itself seems to be too large
+                indexes = [Actions.get_index(a) for a in actions]
+                values = self.q_table.copy()[loc[0], indexes].tolist()
+                # removing the best action, since we want to select from other actions / # ! can be commented
+
+                for ind, v in enumerate(values) :   # getting the index of the max value
+                    if v == max(values) :
+                        max_index = ind
+                        break
+                print(values)
+                print(loc)
+                print(actions)
+                print()
+                indexes.pop(max_index)
+                values.pop(max_index) 
+                values = np.array(values) # convert back values to an array
+                actions.pop(max_index)
+
+                weights = np.exp(values)/np.nansum(np.exp(values))
+                weights = np.nan_to_num(weights, nan= 0) 
+                weights = weights / np.sum(weights) # normalize the weights
+
+                chosen_value = np.random.choice(values, p=weights)
+                chosen_index = np.where(values == chosen_value)[0][0]
+
+                action = actions[chosen_index]
             else :
-                print("-")
+                pass
 
         if action == Actions.up:  action = np.random.choice([Actions.up, Actions.down], p=[self.p, 1-self.p])
         elif action == Actions.right_1: action = np.random.choice([Actions.right_1, Actions.left_1], p=[self.p, 1-self.p])
@@ -253,15 +278,18 @@ class QLearning :
         if actions[0] == Actions.ladder_up :
             # best_value = self.q_table[state-1, Actions.get_index(Actions.ladder_up)]
             best_action = Actions.ladder_up # which is also the only action
+            return best_action
+        
         elif actions[0] == Actions.snake_down :
             # best_value = self.q_table[state-1, Actions.get_index(Actions.snake_down)]
             best_action = Actions.snake_down # which is also the only action
+            return best_action
 
-        if ((self.q_table[state-1, :]) == 0).all() : # when all the q-values have the same value, we choose one randomly
+        action_indexes = [Actions.get_index(a) for a in actions]
+        if ((self.q_table[state-1, action_indexes]) == 0).all() : # when all the q-values have the same value, we choose one randomly
             # best_value = 0
             best_action = np.random.choice(actions)
         else :
-            action_indexes = [Actions.get_index(a) for a in actions]
             # best_value = max(self.q_table[state-1, action_indexes]) 
             best_action_index = np.argmax(self.q_table[state-1, action_indexes])
             best_action = actions[best_action_index] # ! DONT DO THIS  `Actions.index_to_action(best_action_index)` it returns a complete wrong
@@ -288,7 +316,7 @@ class QLearning :
             current_state = self.loc_to_state(self.move(loc, action), self.n)
 
 
-    def _write_logs(self, loc, best_action, action, new_value) :
+    def _write_logs(self, loc, best_action, action, new_value, epsilon) :
             # print(loc)
             # print(best_action, action)
             # print(new_value)
@@ -296,6 +324,8 @@ class QLearning :
 
             # Logging  
             self.logger.info("Location: %s", loc)
+            if self.epsilon_greedy : 
+                self.logger.info("epsilon-0.7: %s", epsilon-self.epsilon_discount_factor)
             self.logger.info("Best action: %s\nAction taken: %s", best_action, action) 
             self.logger.info(new_value)
             self.logger.info("%s\n", self.q_table[self.loc_to_state(loc, self.n)-1, :].tolist())
@@ -323,7 +353,7 @@ class QLearning :
             best_action = self.get_best_move(loc, actions)
 
             # with p=0.7 the best action will happen and with p=0.3 the reverse of it
-            action = self.perturb_action(best_action, actions, epsilon)
+            action = self.perturb_action(loc, best_action, actions, epsilon)
 
 
             new_loc = self.move(loc, action)
@@ -331,13 +361,14 @@ class QLearning :
                 new_value = self.bellman(loc, new_loc, action)
                 self.update_value(self.q_table, loc, action, new_value)
                 new_loc = (0, 0)
+                self.complete_cycle += 1
                 
             else :
                 new_value = self.bellman(loc, new_loc, action) # new value for the current q-value
                 self.update_value(self.q_table, loc, action, new_value) # FIXME it doesn't update , check the log of this block output
 
             if self.log :
-                self._write_logs(loc, best_action, action, new_value)
+                self._write_logs(loc, best_action, action, new_value, epsilon)
             loc = new_loc
             # time.sleep(0.5)
 
@@ -353,7 +384,7 @@ class QLearning :
 
             best_action = self.get_best_move(loc, actions)
             # with p=0.7 the best action will happen and with p=0.3 the reverse of it
-            action = self.perturb_action(action, actions, epsilon)
+            action = self.perturb_action(loc, action, actions, epsilon)
 
             new_loc = self.move(loc, action)
             if new_loc == -1 : # means we have reached the terminal
@@ -366,7 +397,7 @@ class QLearning :
                 self.update_value(self.q_table, loc, action, new_value) # FIXME it doesn't update , check the log of this block output
 
             if self.log :
-                self._write_logs(loc, best_action, action, new_value)
+                self._write_logs(loc, best_action, action, new_value, epsilon)
             loc = new_loc
             # time.sleep(0.5)
             yield loc
