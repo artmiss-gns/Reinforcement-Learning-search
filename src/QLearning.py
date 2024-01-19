@@ -232,10 +232,12 @@ class QLearning :
 
     def perturb_action(self, loc, action, actions, epsilon) :
         if self.epsilon_greedy and len(actions) > 1: # we must have at least 2 option for actions
+            state = self.loc_to_state(loc, self.n)
             if np.random.rand() < (epsilon-self.epsilon_discount_factor) : # randomness  / the epsilon itself seems to be too large
                 indexes = [Actions.get_index(a) for a in actions]
-                values = self.q_table.copy()[loc[0], indexes].tolist()
+                values = self.q_table.copy()[state-1, indexes].tolist()
                 # removing the best action, since we want to select from other actions / # ! can be commented
+
 
                 for ind, v in enumerate(values) :   # getting the index of the max value
                     if v == max(values) :
