@@ -17,8 +17,6 @@ class A_star :
         self.ladders= ladders
         self.ladders_loc = []
 
-        # self.preprocess()
-        
         # fix snakes loc
         if snakes :
             for s in snakes :
@@ -29,6 +27,7 @@ class A_star :
                 )
         else :
             self.snakes_loc = []
+
         # fix ladder loc
         if ladders :
             for l in ladders :
@@ -61,15 +60,6 @@ class A_star :
         state_number = self.loc_to_state(loc, self.n)
         return ((self.n**2)-1) - state_number
         # return  ((self.n-1) - loc[0]) + loc[1] 
-    
-    def preprocess(self) :
-        # assigning values to States
-        n = self.n
-        parent = None
-        for state_number in range(1, (n**2)+1) :
-            state = State(state_number=state_number, parent=parent, g=state_number-1, h=self.heuristic(state))
-            self.states[state.state_number]: state
-            parent = state
 
     def get_actions(self, state: State) -> List[Actions]:
         n = self.n
@@ -227,12 +217,20 @@ class A_star :
     
     def get_best_state(self) -> State:
         return self.check_queue.pop_highest_priority()
+    
+    def get_path(self) :
+        state = self.final_state
+        path = []
+        while state is not None :
+            path.append(state)
+            state = state.parent
+        
+        return path[::-1]
 
     def run(self) :
         current_state = State(self.start_state, g=0, parent=None)
         current_state.h = self.get_heuristic(current_state)
         while current_state.state_number != (self.n**2) :
-            print(current_state.state_number)
             neighbors = self.get_neighbors(current_state)
             for n in neighbors :
                 if n.state_number not in self.visited :                    
@@ -242,4 +240,5 @@ class A_star :
             next_state = self.get_best_state()
             next_state.parent = current_state
             current_state = next_state # update the current state
-        print(current_state.state_number)
+
+        self.final_state=current_state

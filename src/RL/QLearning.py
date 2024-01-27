@@ -260,7 +260,7 @@ class QLearning :
             else :
                 pass
 
-        if action == Actions.up:  action = np.random.choice([Actions.up, Actions.down], p=[self.p, 1-self.p])
+        if action == Actions.up: action = np.random.choice([Actions.up, Actions.down], p=[self.p, 1-self.p])
         elif action == Actions.right_1: action = np.random.choice([Actions.right_1, Actions.left_1], p=[self.p, 1-self.p])
         elif action == Actions.right_2: action = np.random.choice([Actions.right_2, Actions.left_2], p=[self.p, 1-self.p])
         elif action == Actions.left_1: action = np.random.choice([Actions.left_1, Actions.right_1], p=[self.p, 1-self.p])
