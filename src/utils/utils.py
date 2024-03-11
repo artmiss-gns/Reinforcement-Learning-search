@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from src.RL.action import Actions
+from src.RL.q_learning.action import Actions
 
 def show_table(n: int) :
     board = np.arange((n**2), 0, step=-1).reshape(n, n)

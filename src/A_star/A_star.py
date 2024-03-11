@@ -1,6 +1,6 @@
 from src.A_star.PriorityQueue import PriorityQueue
 from src.A_star.state import State
-from src.RL.action import Actions
+from src.RL.q_learning.action import Actions
 
 from typing import Tuple, List
 import numpy as np
@@ -70,6 +70,7 @@ class A_star :
             return [Actions.snake_down]
         elif self.ladders and list(loc) in self.ladders_loc[:, 0:2].tolist(): # if we are at the bottom of a ladder
             return [Actions.ladder_up]
+            
         else :
             # ! if we could NOT move up in all the side states, uncomment this part :
             actions = []
@@ -198,7 +199,6 @@ class A_star :
         return new_loc
     
     def get_neighbors(self, parent:State) -> List[State]:
-        '''returns state number'''
         actions = self.get_actions(parent)
         neighbors = []
         for action in actions :
@@ -231,6 +231,7 @@ class A_star :
         current_state = State(self.start_state, g=0, parent=None)
         current_state.h = self.get_heuristic(current_state)
         while current_state.state_number != (self.n**2) :
+            # print(current_state.state_number)
             neighbors = self.get_neighbors(current_state)
             for n in neighbors :
                 if n.state_number not in self.visited :                    
@@ -240,5 +241,6 @@ class A_star :
             next_state = self.get_best_state()
             next_state.parent = current_state
             current_state = next_state # update the current state
+        # print(current_state.state_number)
 
         self.final_state=current_state
